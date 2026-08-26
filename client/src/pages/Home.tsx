@@ -202,6 +202,9 @@ export default function Home() {
     };
     const onOnline = () => setIsOnline(true);
     const onOffline = () => setIsOnline(false);
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => undefined);
+    }
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);

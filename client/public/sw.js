@@ -1,10 +1,14 @@
 /*
- * Design reminder: the offline layer should be invisible and dependable, matching the calm utility of the training journal.
+ * Design reminder: the offline layer stays invisible and dependable, matching the calm utility of the training journal.
  */
-const CACHE_NAME = "gymapp-shell-v1";
+const CACHE_NAME = "gymapp-shell-v2";
+const BASE_URL = self.location.pathname.replace(/sw\.js$/, "");
 const APP_SHELL = [
-  "/",
-  "/manifest.json",
+  BASE_URL,
+  `${BASE_URL}manifest.json`,
+  `${BASE_URL}icon-192.png`,
+  `${BASE_URL}icon-512.png`,
+  `${BASE_URL}apple-touch-icon.png`,
 ];
 
 self.addEventListener("install", (event) => {
@@ -27,7 +31,7 @@ self.addEventListener("fetch", (event) => {
         const copy = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
         return response;
-      }).catch(() => caches.match("/"));
+      }).catch(() => caches.match(BASE_URL));
     }),
   );
 });

@@ -206,6 +206,8 @@ function vitePluginStorageProxy(): Plugin {
 const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy()];
 
 export default defineConfig({
+  // GitHub Pages serves this project from /gymapp-pwa/; local preview stays at /.
+  base: process.env.GITHUB_ACTIONS ? "/gymapp-pwa/" : "/",
   plugins,
   resolve: {
     alias: {
