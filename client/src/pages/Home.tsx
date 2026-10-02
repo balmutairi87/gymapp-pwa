@@ -7,10 +7,11 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   ArrowUpLeft,
   Check,
-  ChevronLeft,
   CircleHelp,
   Download,
+  ExternalLink,
   Flame,
+  Play,
   RotateCcw,
   Sparkles,
   TimerReset,
@@ -25,6 +26,7 @@ type Section = { name: string; exercises: Exercise[] };
 type WorkoutDay = { id: string; num: number; title: string; sub: string; tip: string; sections: Section[] };
 type ExerciseState = { sets: boolean[]; variant: number };
 type ProgressState = Record<string, ExerciseState>;
+type ExerciseLookup = { id: string; exercise: Exercise; sectionName: string; exerciseIndex: number };
 
 const HERO_IMAGE = "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=1600&q=85";
 const WORKOUT_IMAGE = "https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?auto=format&fit=crop&w=900&q=85";
@@ -139,6 +141,23 @@ function makeExerciseId(dayId: string, sectionIndex: number, exerciseIndex: numb
   return `${dayId}-${sectionIndex}-${exerciseIndex}`;
 }
 
+function firstExerciseId(day: WorkoutDay) {
+  return makeExerciseId(day.id, 0, 0);
+}
+
+function findExercise(day: WorkoutDay, id: string): ExerciseLookup {
+  for (let sectionIndex = 0; sectionIndex < day.sections.length; sectionIndex += 1) {
+    const section = day.sections[sectionIndex];
+    for (let exerciseIndex = 0; exerciseIndex < section.exercises.length; exerciseIndex += 1) {
+      if (makeExerciseId(day.id, sectionIndex, exerciseIndex) === id) {
+        return { id, exercise: section.exercises[exerciseIndex], sectionName: section.name, exerciseIndex };
+      }
+    }
+  }
+  const first = day.sections[0].exercises[0];
+  return { id: firstExerciseId(day), exercise: first, sectionName: day.sections[0].name, exerciseIndex: 0 };
+}
+
 function readProgress(): ProgressState {
   try {
     const saved = localStorage.getItem(STORE_KEY);
@@ -172,9 +191,27 @@ function getAllTotals(state: ProgressState) {
   );
 }
 
+function getVideoExercise(exercise: Exercise, state: ExerciseState): Exercise {
+  const variant = exercise.variants?.[state.variant];
+  return variant ? { ...exercise, name: variant.label, en: variant.en } : exercise;
+}
+
+function getVideoQuery(exercise: Exercise) {
+  return `${exercise.en ?? exercise.name} proper form exercise tutorial`;
+}
+
+function getYouTubeSearchUrl(exercise: Exercise) {
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(getVideoQuery(exercise))}`;
+}
+
+function getYouTubeEmbedUrl(exercise: Exercise) {
+  return `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(getVideoQuery(exercise))}`;
+}
+
 export default function Home() {
   const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [progress, setProgress] = useState<ProgressState>(() => readProgress());
+  const [activeVideoId, setActiveVideoId] = useState(() => firstExerciseId(DAYS[0]));
   const [deferredInstall, setDeferredInstall] = useState<BeforeInstallPromptEvent | null>(null);
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
   const activeDay = DAYS[activeDayIndex];
@@ -182,6 +219,9 @@ export default function Home() {
   const weekTotals = getAllTotals(progress);
   const weekPercent = Math.round((weekTotals.done / weekTotals.total) * 100);
   const dayPercent = Math.round((activeTotals.done / activeTotals.total) * 100);
+  const activeVideoLookup = findExercise(activeDay, activeVideoId);
+  const activeVideoState = getExerciseState(progress, activeVideoLookup.id);
+  const activeVideoExercise = getVideoExercise(activeVideoLookup.exercise, activeVideoState);
 
   const completedDays = useMemo(
     () => DAYS.filter((day) => {
@@ -196,6 +236,10 @@ export default function Home() {
   }, [progress]);
 
   useEffect(() => {
+    setActiveVideoId(firstExerciseId(activeDay));
+  }, [activeDayIndex, activeDay]);
+
+  useEffect(() => {
     const onBeforeInstall = (event: Event) => {
       event.preventDefault();
       setDeferredInstall(event as BeforeInstallPromptEvent);
@@ -203,7 +247,7 @@ export default function Home() {
     const onOnline = () => setIsOnline(true);
     const onOffline = () => setIsOnline(false);
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js?v=3`).catch(() => undefined);
+      navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js?v=4`).catch(() => undefined);
     }
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
     window.addEventListener("online", onOnline);
@@ -228,6 +272,13 @@ export default function Home() {
 
   const selectVariant = (id: string, variant: number) => {
     updateProgress(id, { ...getExerciseState(progress, id), variant });
+  };
+
+  const openExerciseGuide = (id: string) => {
+    setActiveVideoId(id);
+    window.requestAnimationFrame(() => {
+      document.getElementById("video-guide")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
   };
 
   const resetCurrentDay = () => {
@@ -265,7 +316,7 @@ export default function Home() {
         <div className="rail-bottom">
           <button className="rail-action" onClick={installApp} type="button"><Download size={15} /> <span>ثبّت التطبيق</span></button>
           <div className="rail-status"><span className={`status-dot ${isOnline ? "online" : "offline"}`} />{isOnline ? "متصل" : "دون اتصال"}</div>
-          <div className="rail-version">GYM / 01</div>
+          <div className="rail-version">GYM / 02</div>
         </div>
       </aside>
 
@@ -282,7 +333,7 @@ export default function Home() {
           <div className="masthead-copy">
             <div className="eyebrow"><span className="eyebrow-mark" />دفتر التدريب / أسبوعك الحالي</div>
             <h1>اليوم يبدأ<br /><em>هنا.</em></h1>
-            <p className="masthead-lede">لا تحتاج أن تحفظ الخطة. فقط افتح الصفحة، سجّل المجموعة، واترك التقدم يتجمع.</p>
+            <p className="masthead-lede">لا تحتاج أن تحفظ الخطة. فقط افتح الصفحة، شاهد الحركة الصحيحة، سجّل المجموعة، واترك التقدم يتجمع.</p>
           </div>
           <div className="masthead-image-wrap">
             <img src={HERO_IMAGE} alt="أدوات تدريب مرتبة في استوديو هادئ" className="masthead-image" />
@@ -336,6 +387,31 @@ export default function Home() {
             </div>
           </div>
 
+          <section className="video-guide-card" id="video-guide" aria-labelledby="video-guide-title">
+            <div className="video-frame-wrap">
+              <iframe
+                className="video-frame"
+                src={getYouTubeEmbedUrl(activeVideoExercise)}
+                title={`فيديو شرح ${activeVideoExercise.name}`}
+                loading="lazy"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+              />
+              <div className="video-frame-badge"><Play size={13} fill="currentColor" /> شرح الحركة</div>
+            </div>
+            <div className="video-guide-copy">
+              <div className="video-guide-kicker"><span className="live-dot" />دليل الحركة / FORM GUIDE</div>
+              <h4 id="video-guide-title">شاهد الشرح قبل أول مجموعة</h4>
+              <p className="video-guide-exercise">{activeVideoExercise.name}</p>
+              <p className="video-guide-meta">{activeVideoLookup.sectionName} · {activeVideoExercise.reps}</p>
+              <p className="video-guide-note">اختر أي تمرين من القائمة ليتغير الفيديو تلقائيًا. استخدم وزنًا تستطيع التحكم فيه، وتوقف إذا شعرت بألم غير طبيعي.</p>
+              <a className="video-external-link" href={getYouTubeSearchUrl(activeVideoExercise)} target="_blank" rel="noreferrer">
+                افتح نتائج الفيديو في يوتيوب <ExternalLink size={14} />
+              </a>
+            </div>
+          </section>
+
           <div className="workout-layout">
             <div className="exercise-column">
               {activeDay.sections.map((section, sectionIndex) => (
@@ -346,15 +422,20 @@ export default function Home() {
                       const id = makeExerciseId(activeDay.id, sectionIndex, exerciseIndex);
                       const exerciseState = getExerciseState(progress, id);
                       const selectedVariant = exercise.variants?.[exerciseState.variant];
+                      const isVideoActive = id === activeVideoLookup.id;
                       return (
-                        <article className={`exercise-card ${exerciseState.sets.every(Boolean) ? "is-done" : ""}`} key={id}>
+                        <article className={`exercise-card ${exerciseState.sets.every(Boolean) ? "is-done" : ""} ${isVideoActive ? "is-video-active" : ""}`} key={id}>
                           <div className="exercise-card-top">
                             <span className="exercise-index">{String(exerciseIndex + 1).padStart(2, "0")}</span>
                             <div className="exercise-name"><strong>{selectedVariant?.label ?? exercise.name}</strong><small>{selectedVariant?.en ?? exercise.en ?? ""}</small></div>
                             <span className="exercise-target">{exercise.reps}</span>
                           </div>
                           {exercise.variants && <div className="variant-switch" role="group" aria-label={`اختيار بديل لـ ${exercise.name}`}>{exercise.variants.map((variant, variantIndex) => <button key={variant.label} type="button" className={variantIndex === exerciseState.variant ? "selected" : ""} onClick={() => selectVariant(id, variantIndex)}>{variant.label}</button>)}</div>}
-                          <div className="sets-row"><span className="sets-caption">تسجيل الجولات</span><div className="set-controls">{exerciseState.sets.map((isSetDone, setIndex) => <button type="button" key={setIndex} className={`set-control ${isSetDone ? "done" : ""}`} onClick={() => toggleSet(id, setIndex)} aria-label={`${isSetDone ? "إلغاء" : "تسجيل"} الجولة ${setIndex + 1}`}>{isSetDone ? <Check size={14} /> : setIndex + 1}</button>)}</div></div>
+                          <div className="exercise-meta-row">
+                            <span className="sets-caption">تسجيل الجولات</span>
+                            <button className={`video-trigger ${isVideoActive ? "selected" : ""}`} type="button" onClick={() => openExerciseGuide(id)} aria-pressed={isVideoActive}><Play size={13} fill="currentColor" />{isVideoActive ? "الشرح مفتوح" : "شاهد الشرح"}</button>
+                            <div className="set-controls">{exerciseState.sets.map((isSetDone, setIndex) => <button type="button" key={setIndex} className={`set-control ${isSetDone ? "done" : ""}`} onClick={() => toggleSet(id, setIndex)} aria-label={`${isSetDone ? "إلغاء" : "تسجيل"} الجولة ${setIndex + 1}`}>{isSetDone ? <Check size={14} /> : setIndex + 1}</button>)}</div>
+                          </div>
                         </article>
                       );
                     })}
@@ -366,6 +447,7 @@ export default function Home() {
             <aside className="session-sidebar">
               <div className="session-photo"><img src={WORKOUT_IMAGE} alt="حبل مقاومة وورقة تسجيل تمرين" /><span className="photo-caption">الأداة لا تصنع التمرين.<br />الاستمرارية تفعل.</span></div>
               <div className="tip-card"><div className="tip-icon"><CircleHelp size={18} /></div><div><span className="tip-label">هام قبل البدء</span><p>{activeDay.tip}</p></div></div>
+              <div className="session-checklist"><span className="checklist-label"><Flame size={14} /> إيقاع الجلسة</span><span>١. شاهد الحركة</span><span>٢. اختر وزنًا مناسبًا</span><span>٣. سجّل كل مجموعة</span></div>
               <button className="reset-day" type="button" onClick={resetCurrentDay}><RotateCcw size={15} /> تصفير هذا اليوم</button>
             </aside>
           </div>
